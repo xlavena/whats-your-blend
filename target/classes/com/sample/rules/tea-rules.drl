@@ -1,0 +1,819 @@
+package com.sample.rules
+
+import com.sample.TeaAdvisorGUI
+
+global com.sample.TeaAdvisorGUI gui
+
+
+declare Question
+    id: String
+    options: java.util.List
+    multiSelect: boolean
+end
+
+declare Temperature
+    preference: String
+end
+
+declare TeaBase
+    type: String
+end
+
+declare Characteristic
+    value: String
+end
+
+declare IfTea
+	type: String
+end
+
+declare MilkPreference
+    wants: boolean
+end
+
+declare FlavorShot
+    wants: boolean
+end
+
+declare Recommendation
+    name: String
+    description: String
+end
+
+
+declare TemperatureType
+    HOT: String = "HOT"
+    COLD: String = "COLD"
+end
+
+declare TeaType
+    GREEN: String = "GREEN"
+    OOLONG: String = "OOLONG"
+    BLACK: String = "BLACK"
+end
+
+declare TeaShade
+    LIGHT: String = "LIGHT"
+    DARK: String = "DARK"
+    CANT_DECIDE: String = "CANT_DECIDE"
+end
+
+declare DrinkStyle
+    BLENDED: String = "BLENDED"
+    ICED: String = "ICED"
+end
+
+// First question
+rule "Start - question about temperature"
+    when
+        not Temperature()
+        not Recommendation()
+    then
+        Question q = new Question();
+        q.setId("Q_TEMP");
+        q.setOptions(java.util.Arrays.asList("HOT", "COLD"));
+        q.setMultiSelect(false);
+        gui.askQuestion(q);
+        gui.displayQuestion("Q_TEMP", q.getOptions(), false);
+end
+
+// Handle answers about temperature
+
+rule "Answer HOT"
+    when
+        q: Question(id == "Q_TEMP")
+        String(this == "HOT")
+        not Temperature()
+    then
+        retract(q);
+        Temperature t = new Temperature();
+        t.setPreference("HOT");
+        insert(t);
+end
+
+rule "Answer COLD"
+    when
+        q: Question(id == "Q_TEMP")
+        String(this == "COLD")
+        not Temperature()
+    then
+        retract(q);
+        Temperature t = new Temperature();
+        t.setPreference("COLD");
+        insert(t);
+end
+
+// HOT path - ask about tea
+
+rule "HOT - ask about tea"
+    when
+        Temperature(preference == "HOT")
+        not IfTea()
+        not TeaBase()
+        not Recommendation()
+    then
+        Question q = new Question();
+        q.setId("Q_TEA_HOT");
+        q.setOptions(java.util.Arrays.asList("YES_TEA_HOT", "NO_TEA_HOT"));
+        q.setMultiSelect(false);
+        gui.askQuestion(q);
+        gui.displayQuestion("Q_TEA_HOT", q.getOptions(), false);
+end
+
+rule "Answer YES_TEA_HOT"
+    when
+        q: Question(id == "Q_TEA_HOT")
+        String(this == "YES_TEA_HOT")
+        not IfTea()
+    then
+        retract(q);
+        IfTea it = new IfTea();
+        it.setType("YES_TEA_HOT");
+        insert(it);
+end
+
+rule "Answer NO_TEA -> try cold"
+    when
+        q: Question(id == "Q_TEA_HOT")
+        String(this == "NO_TEA_HOT")
+        not Recommendation()
+    then
+        retract(q);
+        Recommendation rec = new Recommendation();
+        rec.setName("TRY_SOMETHING_COLD");
+        rec.setDescription("");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+// HOT + YES_TEA -> ask about tea base
+
+rule "HOT + YES_TEA - ask about tea base"
+    when
+        Temperature(preference == "HOT")
+        IfTea(type == "YES_TEA_HOT")
+        not TeaBase()
+        not Recommendation()
+    then
+        Question q = new Question();
+        q.setId("Q_TEA_BASE");
+        q.setOptions(java.util.Arrays.asList("LIGHT", "DARK", "CANT_DECIDE"));
+        q.setMultiSelect(false);
+        gui.askQuestion(q);
+        gui.displayQuestion("Q_TEA_BASE", q.getOptions(), false);
+end
+
+rule "Answer LIGHT for HOT"
+    when
+        q: Question(id == "Q_TEA_BASE")
+        String(this == "LIGHT")
+        not TeaBase()
+    then
+        retract(q);
+        TeaBase tb = new TeaBase();
+        tb.setType("LIGHT");
+        insert(tb);
+end
+
+rule "Answer DARK for HOT"
+    when
+        q: Question(id == "Q_TEA_BASE")
+        String(this == "DARK")
+        not TeaBase()
+    then
+        retract(q);
+        TeaBase tb = new TeaBase();
+        tb.setType("DARK");
+        insert(tb);
+end
+
+rule "Answer CANT_DECIDE for HOT"
+    when
+        q: Question(id == "Q_TEA_BASE")
+        String(this == "CANT_DECIDE")
+        not TeaBase()
+    then
+        retract(q);
+        TeaBase tb = new TeaBase();
+        tb.setType("CANT_DECIDE");
+        insert(tb);
+end
+
+// HOT + TEA + BASE -> ask about flavour
+
+rule "HOT + TEA + BASE - ask about flavour"
+    when
+        Temperature(preference == "HOT")
+        IfTea(type == "YES_TEA_HOT")
+        exists TeaBase()
+        not FlavorShot()
+        not Recommendation()
+    then
+        Question q = new Question();
+        q.setId("Q_FLAVOR");
+        q.setOptions(java.util.Arrays.asList("YES_FLAVOR", "NO_FLAVOR"));
+        q.setMultiSelect(false);
+        gui.askQuestion(q);
+        gui.displayQuestion("Q_FLAVOR", q.getOptions(), false);
+end
+
+rule "Answer YES for HOT"
+    when
+        q: Question(id == "Q_FLAVOR")
+        String(this == "YES_FLAVOR")
+        not FlavorShot()
+    then
+        retract(q);
+        FlavorShot fs = new FlavorShot();
+        fs.setWants(true);
+        insert(fs);
+end
+
+rule "Answer NO for HOT"
+    when
+        q: Question(id == "Q_FLAVOR")
+        String(this == "NO_FLAVOR")
+        not FlavorShot()
+    then
+        retract(q);
+        FlavorShot fs = new FlavorShot();
+        fs.setWants(false);
+        insert(fs);
+end
+
+// Recommendations for HOT + TEA + NO_FLAVOR
+
+rule "HOT + TEA + LIGHT + NO_FLAVOR -> GREEN TEA"
+    when
+        Temperature(preference == "HOT")
+        FlavorShot(wants == false)
+        TeaBase(type == "LIGHT")
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_GREEN_TEA");
+        rec.setDescription("");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+rule "HOT + TEA + DARK + NO_FLAVOR -> BLACK TEA"
+    when
+        Temperature(preference == "HOT")
+        FlavorShot(wants == false)
+        TeaBase(type == "DARK")
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_BLACK_TEA");
+        rec.setDescription("");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+rule "HOT + TEA + CANT_DECIDE + NO_FLAVOR -> OOLONG TEA"
+    when
+        Temperature(preference == "HOT")
+        FlavorShot(wants == false)
+        TeaBase(type == "CANT_DECIDE")
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_OOLONG_TEA");
+        rec.setDescription("");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+// Recommendations for HOT + TEA + YES_FLAVOR
+
+rule "HOT + TEA + LIGHT + YES_FLAVOR -> LEMON GREEN TEA"
+    when
+        Temperature(preference == "HOT")
+        FlavorShot(wants == true)
+        TeaBase(type == "LIGHT")
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_LEMON_GREEN_TEA");
+        rec.setDescription("DESC_LEMON_GREEN_TEA");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+rule "HOT + TEA + DARK + YES_FLAVOR -> CHAI BLACK TEA"
+    when
+        Temperature(preference == "HOT")
+        FlavorShot(wants == true)
+        TeaBase(type == "DARK")
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_CHAI_BLACK_TEA");
+        rec.setDescription("DESC_CHAI_BLACK_TEA");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+rule "HOT + TEA + CANT_DECIDE + YES_FLAVOR -> PINAPPLE OOLONG TEA"
+    when
+        Temperature(preference == "HOT")
+        FlavorShot(wants == true)
+        TeaBase(type == "CANT_DECIDE")
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_PINEAPPLE_OOLONG");
+        rec.setDescription("DESC_PINEAPPLE_OOLONG");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+// COLD path - ask about tea
+
+rule "COLD - ask about tea"
+    when
+        Temperature(preference == "COLD")
+        not IfTea()
+        not TeaBase()
+        not Recommendation()
+    then
+        Question q = new Question();
+        q.setId("Q_TEA_COLD");
+        q.setOptions(java.util.Arrays.asList("YES_TEA_COLD", "NO_TEA_COLD"));
+        q.setMultiSelect(false);
+        gui.askQuestion(q);
+        gui.displayQuestion("Q_TEA_COLD", q.getOptions(), false);
+end
+
+rule "Answer YES_TEA_COLD"
+    when
+        q: Question(id == "Q_TEA_COLD")
+        String(this == "YES_TEA_COLD")
+        not IfTea()
+    then
+        retract(q);
+        IfTea it = new IfTea();
+        it.setType("YES");
+        insert(it);
+end
+
+rule "Answer NO_TEA_COLD"
+    when
+        q: Question(id == "Q_TEA_COLD")
+        String(this == "NO_TEA_COLD")
+        not IfTea()
+    then
+        retract(q);
+        IfTea it = new IfTea();
+        it.setType("NO");
+        insert(it);
+end
+
+// COLD + YES_TEA - ask about tea base
+
+rule "COLD + YES_TEA - ask about tea base"
+    when
+        Temperature(preference == "COLD")
+        IfTea(type == "YES")
+        not TeaBase()
+        not Recommendation()
+    then
+        Question q = new Question();
+        q.setId("Q_TEA_BASE");
+        q.setOptions(java.util.Arrays.asList("LIGHT", "DARK", "CANT_DECIDE"));
+        q.setMultiSelect(false);
+        gui.askQuestion(q);
+        gui.displayQuestion("Q_TEA_BASE", q.getOptions(), false);
+end
+
+rule "Answer LIGHT for ICED"
+    when
+        q: Question(id == "Q_TEA_BASE")
+        String(this == "LIGHT")
+        not TeaBase()
+    then
+        retract(q);
+        TeaBase tb = new TeaBase();
+        tb.setType("LIGHT");
+        insert(tb);
+end
+
+rule "Answer DARK for ICED"
+    when
+        q: Question(id == "Q_TEA_BASE")
+        String(this == "DARK")
+        not TeaBase()
+    then
+        retract(q);
+        TeaBase tb = new TeaBase();
+        tb.setType("DARK");
+        insert(tb);
+end
+
+rule "Answer CANT_DECIDE for ICED"
+    when
+        q: Question(id == "Q_TEA_BASE")
+        String(this == "CANT_DECIDE")
+        not TeaBase()
+    then
+        retract(q);
+        TeaBase tb = new TeaBase();
+        tb.setType("CANT_DECIDE");
+        insert(tb);
+end
+
+// COLD + TEA + BASE -> ask about flavour
+
+rule "COLD + TEA + BASE - ask about flavour"
+    when
+        Temperature(preference == "COLD")
+        IfTea(type == "YES")
+        exists TeaBase()
+        not FlavorShot()
+        not Recommendation()
+    then
+        Question q = new Question();
+        q.setId("Q_FLAVOR");
+        q.setOptions(java.util.Arrays.asList("YES_FLAVOR", "NO_FLAVOR"));
+        q.setMultiSelect(false);
+        gui.askQuestion(q);
+        gui.displayQuestion("Q_FLAVOR", q.getOptions(), false);
+end
+
+rule "Answer YES for COLD"
+    when
+        q: Question(id == "Q_FLAVOR")
+        String(this == "YES_FLAVOR")
+        not FlavorShot()
+    then
+        retract(q);
+        FlavorShot fs = new FlavorShot();
+        fs.setWants(true);
+        insert(fs);
+end
+
+rule "Answer NO for COLD"
+    when
+        q: Question(id == "Q_FLAVOR")
+        String(this == "NO_FLAVOR")
+        not FlavorShot()
+    then
+        retract(q);
+        FlavorShot fs = new FlavorShot();
+        fs.setWants(false);
+        insert(fs);
+end
+
+// Recommendations for COLD + ICED TEA + NO_FLAVOR
+
+rule "COLD + ICED TEA + LIGHT + NO_FLAVOR -> ICED GREEN TEA"
+    when
+        Temperature(preference == "COLD")
+        IfTea(type == "YES")
+        FlavorShot(wants == false)
+        TeaBase(type == "LIGHT")
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_ICED_GREEN_TEA");
+        rec.setDescription("");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+rule "COLD + ICED TEA + DARK + NO_FLAVOR -> ICED BLACK TEA"
+    when
+        Temperature(preference == "COLD")
+        IfTea(type == "YES")
+        FlavorShot(wants == false)
+        TeaBase(type == "DARK")
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_ICED_BLACK_TEA");
+        rec.setDescription("");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+rule "COLD + ICED TEA + CANT_DECIDE + NO_FLAVOR -> ICED OOLONG TEA"
+    when
+        Temperature(preference == "COLD")
+        IfTea(type == "YES")
+        FlavorShot(wants == false)
+        TeaBase(type == "CANT_DECIDE")
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_ICED_OOLONG_TEA");
+        rec.setDescription("");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+// Recommendations for COLD + ICED TEA + YES_FLAVOR
+
+rule "COLD + ICED TEA + LIGHT + YES_FLAVOR -> ICED LEMON GREEN TEA"
+    when
+        Temperature(preference == "COLD")
+        IfTea(type == "YES")
+        FlavorShot(wants == true)
+        TeaBase(type == "LIGHT")
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_LEMON_GREEN_TEA");
+        rec.setDescription("DESC_ICED_LEMON_GREEN_TEA");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+rule "COLD + ICED TEA + DARK + YES_FLAVOR -> ICED CHAI BLACK TEA"
+    when
+        Temperature(preference == "COLD")
+        IfTea(type == "YES")
+        FlavorShot(wants == true)
+        TeaBase(type == "DARK")
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_CHAI_BLACK_TEA");
+        rec.setDescription("DESC_ICED_CHAI_BLACK_TEA");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+rule "COLD + ICED TEA + CANT_DECIDE + YES_FLAVOR -> ICED PINAPPLE OOLONG TEA"
+    when
+        Temperature(preference == "COLD")
+        IfTea(type == "YES")
+        FlavorShot(wants == true)
+        TeaBase(type == "CANT_DECIDE")
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_PINEAPPLE_OOLONG");
+        rec.setDescription("DESC_ICED_PINEAPPLE_OOLONG");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+// COLD + NO_TEA - ask about blended/iced
+
+rule "COLD + NO_TEA - ask about blended/iced"
+    when
+        Temperature(preference == "COLD")
+        IfTea(type == "NO")
+        not Characteristic()
+        not Recommendation()
+    then
+        Question q = new Question();
+        q.setId("Q_BLENDED_ICED");
+        q.setOptions(java.util.Arrays.asList("BLENDED", "ICED"));
+        q.setMultiSelect(false);
+        gui.askQuestion(q);
+        gui.displayQuestion("Q_BLENDED_ICED", q.getOptions(), false);
+end
+
+rule "Answer BLENDED"
+    when
+        q: Question(id == "Q_BLENDED_ICED")
+        String(this == "BLENDED")
+        not Characteristic()
+    then
+        retract(q);
+        Characteristic c = new Characteristic();
+        c.setValue("BLENDED");
+        insert(c);
+end
+
+rule "Answer ICED"
+    when
+        q: Question(id == "Q_BLENDED_ICED")
+        String(this == "ICED")
+        not Characteristic()
+    then
+        retract(q);
+        Characteristic c = new Characteristic();
+        c.setValue("ICED");
+        insert(c);
+end
+
+// COLD + BLENDED - ask about milk
+
+rule "COLD + BLENDED - ask about milk"
+    when
+        Temperature(preference == "COLD")
+        Characteristic(value == "BLENDED")
+        not MilkPreference()
+        not Recommendation()
+    then
+        Question q = new Question();
+        q.setId("Q_MILK_BLENDED");
+        q.setOptions(java.util.Arrays.asList("YES_MILK", "NO_MILK"));
+        q.setMultiSelect(false);
+        gui.askQuestion(q);
+        gui.displayQuestion("Q_MILK_BLENDED", q.getOptions(), false);
+end
+
+rule "Answer YES_MILK for blended"
+    when
+        q: Question(id == "Q_MILK_BLENDED")
+        String(this == "YES_MILK")
+        not MilkPreference()
+    then
+        retract(q);
+        MilkPreference mp = new MilkPreference();
+        mp.setWants(true);
+        insert(mp);
+end
+
+rule "Answer NO_MILK for blended"
+    when
+        q: Question(id == "Q_MILK_BLENDED")
+        String(this == "NO_MILK")
+        not MilkPreference()
+    then
+        retract(q);
+        MilkPreference mp = new MilkPreference();
+        mp.setWants(false);
+        insert(mp);
+end
+
+// COLD + BLENDED + YES_MILK -> SMOOTHIE
+
+rule "COLD + BLENDED + YES_MILK -> SMOOTHIE"
+    when
+        Temperature(preference == "COLD")
+        Characteristic(value == "BLENDED")
+        MilkPreference(wants == true)
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_SMOOTHIE");
+        rec.setDescription("DESC_SMOOTHIE");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+// COLD + BLENDED + NO_MILK -> SLUSH
+
+rule "COLD + BLENDED + NO_MILK -> SLUSH"
+    when
+        Temperature(preference == "COLD")
+        Characteristic(value == "BLENDED")
+        MilkPreference(wants == false)
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_SLUSH");
+        rec.setDescription("DESC_SLUSH");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+// COLD + ICED - ask about milk tea
+
+rule "COLD + ICED - ask about milk tea"
+    when
+        Temperature(preference == "COLD")
+        Characteristic(value == "ICED")
+        IfTea(type == "NO")
+        not Recommendation()
+    then
+        Question q = new Question();
+        q.setId("Q_TEA_MILK");
+        q.setOptions(java.util.Arrays.asList("YES_TEA_MILK", "NO_TEA_MILK"));
+        q.setMultiSelect(false);
+        gui.askQuestion(q);
+        gui.displayQuestion("Q_TEA_MILK", q.getOptions(), false);
+end
+
+rule "Answer YES_TEA_MILK"
+    when
+        q: Question(id == "Q_TEA_MILK")
+        String(this == "YES_TEA_MILK")
+        it: IfTea()
+    then
+        retract(q);
+        retract(it)
+        IfTea newIt = new IfTea();
+        newIt.setType("YES_TEA_MILK");
+        insert(newIt);
+end
+
+rule "Answer NO_TEA_MILK -> try something hot"
+    when
+        q: Question(id == "Q_TEA_MILK")
+        String(this == "NO_TEA_MILK")
+        not Recommendation()
+    then
+        retract(q);
+        Recommendation rec = new Recommendation();
+        rec.setName("TRY_SOMETHING_HOT");
+        rec.setDescription("");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+// COLD + ICED + YES_TEA_MILK - ask about tea base
+
+rule "COLD + ICED + YES_TEA_MILK - ask about tea base"
+    when
+        Temperature(preference == "COLD")
+        Characteristic(value == "ICED")
+        IfTea(type == "YES_TEA_MILK")
+        not TeaBase()
+        not Recommendation()
+    then
+        Question q = new Question();
+        q.setId("Q_TEA_BASE");
+        q.setOptions(java.util.Arrays.asList("LIGHT", "DARK", "CANT_DECIDE"));
+        q.setMultiSelect(false);
+        gui.askQuestion(q);
+        gui.displayQuestion("Q_TEA_BASE", q.getOptions(), false);
+end
+
+rule "Answer LIGHT for iced milk tea"
+    when
+        q: Question(id == "Q_TEA_BASE")
+        String(this == "LIGHT")
+        not TeaBase()
+    then
+        retract(q);
+        TeaBase tb = new TeaBase();
+        tb.setType("LIGHT");
+        insert(tb);
+end
+
+rule "Answer DARK for iced milk tea"
+    when
+        q: Question(id == "Q_TEA_BASE")
+        String(this == "DARK")
+        not TeaBase()
+    then
+        retract(q);
+        TeaBase tb = new TeaBase();
+        tb.setType("DARK");
+        insert(tb);
+end
+
+rule "Answer CANT_DECIDE for iced milk tea"
+    when
+        q: Question(id == "Q_TEA_BASE")
+        String(this == "CANT_DECIDE")
+        not TeaBase()
+    then
+        retract(q);
+        TeaBase tb = new TeaBase();
+        tb.setType("CANT_DECIDE");
+        insert(tb);
+end
+
+// Recommendations for COLD + TEA + MILK + BASE
+
+rule "COLD + TEA + MILK + LIGHT -> GREEN MILK TEA"
+    when
+        Temperature(preference == "COLD")
+        Characteristic(value == "ICED")
+        IfTea(type == "YES_TEA_MILK")
+        TeaBase(type == "LIGHT")
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_GREEN_MILK_TEA");
+        rec.setDescription("");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+rule "COLD + TEA + MILK + DARK -> BLACK MILK TEA"
+    when
+        Temperature(preference == "COLD")
+        Characteristic(value == "ICED")
+        IfTea(type == "YES_TEA_MILK")
+        TeaBase(type == "DARK")
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_BLACK_MILK_TEA");
+        rec.setDescription("");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
+
+rule "COLD + TEA + MILK + CAN'T DECIDE -> OOLONG MILK TEA"
+    when
+        Temperature(preference == "COLD")
+        Characteristic(value == "ICED")
+        IfTea(type == "YES_TEA_MILK")
+        TeaBase(type == "CANT_DECIDE")
+        not Recommendation()
+    then
+        Recommendation rec = new Recommendation();
+        rec.setName("REC_OOLONG_MILK_TEA");
+        rec.setDescription("");
+        insert(rec);
+        gui.displayRecommendation(rec.getName(), rec.getDescription());
+end
